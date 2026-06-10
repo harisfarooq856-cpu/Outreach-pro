@@ -1,0 +1,321 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Shared prompt builder — 3 outreach types, expert cold email style.
+ * Plain prose only. Pain-first. No bullets. Location + Services used throughout.
+ */
+class SEO_Outreach_Prompt {
+
+    public static function build( array $lead, array $ps_data, string $cal_link ): string {
+        $type = $lead['outreach_type'] ?? 'seo';
+        switch ( $type ) {
+            case 'ads':        return self::build_ads_prompt( $lead, $ps_data, $cal_link );
+            case 'no_website': return self::build_no_website_prompt( $lead, $cal_link );
+            default:           return self::build_seo_prompt( $lead, $ps_data, $cal_link );
+        }
+    }
+
+    // ── Shared helpers ────────────────────────────────────────────────────────
+
+    private static function clean_name( array $lead ): string {
+        $raw = trim( $lead['business_name'] ?? '' );
+        $raw = str_replace( [ '_', '-' ], ' ', $raw );
+        $raw = ucwords( strtolower( $raw ) );
+        if ( empty( $raw ) && ! empty( $lead['website'] ) ) {
+            $host = preg_replace( '/^https?:\/\/(www\.)?/', '', $lead['website'] );
+            $host = explode( '.', $host )[0];
+            $raw  = ucfirst( strtolower( str_replace( [ '_', '-' ], ' ', $host ) ) );
+        }
+        return ! empty( $raw ) ? $raw : 'Your Business';
+    }
+
+    private static function opp_text( array $ps ): string {
+        $out = '';
+        foreach ( $ps['opportunities'] ?? [] as $o ) {
+            $out .= "- {$o['label']}" . ( $o['savings'] ? " (saves: {$o['savings']})" : '' ) . "\n";
+        }
+        return $out ?: "- General performance improvements needed\n";
+    }
+
+    private static function seo_issues( array $ps ): string {
+        $seo  = (int)( $ps['seo_score'] ?? 70 );
+        $perf = (int)( $ps['performance_score'] ?? 70 );
+        $cls  = (float)( $ps['cls'] ?? 0 );
+        $i    = [];
+        if ( $seo < 80 )   $i[] = 'content not matching what buyers actually search for';
+        if ( $seo < 70 )   $i[] = 'thin content with no topical depth for Google to trust the site';
+        if ( $seo < 65 )   $i[] = 'weak internal linking — Google cannot crawl and understand the site';
+        if ( $seo < 55 )   $i[] = 'no structured data — invisible to AI search engines';
+        if ( $perf < 70 )  $i[] = 'heavy unoptimised assets blocking the first render';
+        if ( $cls > 0.1 )  $i[] = 'page layout shifts that kill user trust and bounce visitors';
+        if ( empty( $i ) ) $i[] = 'weak keyword targeting — not ranking for any core service terms';
+        $i[] = 'no AI search optimisation — not appearing in ChatGPT or Google AI answers';
+        return implode( ', ', $i );
+    }
+
+    private static function services_line( array $lead ): string {
+        $s = trim( $lead['services'] ?? '' );
+        return ! empty( $s )
+            ? "Services they offer: {$s}"
+            : "Services: not specified — infer from business name, industry, and website if available";
+    }
+
+    // ── SEO prompt ────────────────────────────────────────────────────────────
+
+    private static function build_seo_prompt( array $lead, array $ps, string $cal_link ): string {
+        $biz      = self::clean_name( $lead );
+        $city     = ! empty( trim( $lead['location'] ?? '' ) ) ? trim( $lead['location'] ) : 'your area';
+        $website  = $lead['website'] ?? '';
+        $perf     = $ps['performance_score'];
+        $seo      = $ps['seo_score'];
+        $lcp_sec  = $ps['lcp_sec'];
+        $opp      = self::opp_text( $ps );
+        $issues   = self::seo_issues( $ps );
+        $services = self::services_line( $lead );
+
+        return <<<PROMPT
+You are an elite cold email copywriter. You write short, punchy, human emails that get replies.
+
+Write ONE cold outreach email for Haris Farooq (AI Driven SEO Expert, harisfarooqseo.online) to send to {$biz}.
+
+BUSINESS DATA:
+- Business Name: {$biz}
+- Website: {$website}
+- City / Location: {$city}
+- {$services}
+- Performance Score: {$perf}/100
+- SEO Score: {$seo}/100
+- Page Load Time: {$lcp_sec}s
+- Real SEO problems: {$issues}
+- Technical issues found: {$opp}
+
+SERVICES RULE — CRITICAL:
+Use the services listed above to make the email specific. Mention their actual service (e.g. "plumbing", "HVAC repair", "dental care") when talking about what customers search for. Do NOT use generic phrases like "your services" or "what you offer". Use the real service name from the data above.
+
+LOCATION RULE — CRITICAL:
+The city "{$city}" MUST appear naturally at least 2 times in the email body. Tie it to lost customers and competitors. Never replace it with "your area" or "locally". Always use the actual city name: {$city}.
+
+THE CORE PAIN:
+{$biz} has a website but it is invisible. When someone in {$city} searches for their service, competitors show up. {$biz} does not. Every missed search is a customer calling someone else.
+
+EMAIL STRUCTURE:
+
+SUBJECT: Max 6 words. Reference {$city} or {$biz}. Create curiosity. No question marks.
+
+PARAGRAPH 1 — THE HOOK (2-3 sentences):
+Open with the blunt truth — {$biz} is not showing up when people in {$city} search for their specific service. Name the service. Competitors are there. {$biz} is not. Do NOT open with speed or load time. Do NOT start with "I".
+
+PARAGRAPH 2 — THE PROOF (2-3 sentences):
+Bring in one specific data point — SEO score {$seo}/100 is the strongest. Explain what it means in plain English. Connect it directly to people in {$city} searching for the service and not finding {$biz}. Mention the worst issue from: {$issues}.
+
+PARAGRAPH 3 — THE OUTCOME (2 sentences):
+What changes when this is fixed — more calls from {$city} for their specific service, showing up in Google and ChatGPT when people in {$city} search for it.
+
+CTA (2 sentences — write these naturally into the email, do NOT copy them word for word):
+First sentence: most businesses that fix these SEO issues start getting more calls from {$city} within 30 days — without paying for a single ad.
+Second sentence: ask if they have 15 minutes this week to see exactly what is stopping {$biz} from ranking for their service in {$city}.
+
+SIGN OFF:
+Haris Farooq | SEO Specialist | hello@harisfarooqseo.online
+
+STYLE — non-negotiable:
+- Plain flowing prose paragraphs. ZERO bullet points. ZERO dashes. ZERO lists.
+- Short sentences. Max 15 words each.
+- Simple English. No jargon. No "digital presence", "online visibility", "leverage", "synergy", "reach out", "touch base".
+- Never say "I hope", "I came across", "I noticed", "I specialize", "I offer".
+- Never bold anything. No asterisks. No markdown.
+- Total body: 100-120 words. Not counting subject or sign-off.
+- Output ONLY the final email. No labels. No explanation.
+
+AUDIT REPORT for PDF:
+1. Executive summary: what {$biz} does (mention their services), what the audit found, impact on {$city} customers
+2. Two technical issues: page speed ({$lcp_sec}s) + worst item from: {$opp}
+3. Two SEO/content gaps from: {$issues} — with business impact for their service in {$city}
+4. Action plan: 4-5 sentences on outcomes (more clients in {$city} for their service, AI visibility). Soft CTA: {$cal_link}
+
+RESPOND ONLY WITH VALID JSON — no markdown, no backticks:
+{
+  "email_subject": "...",
+  "email_body": "...",
+  "report": {
+    "executive_summary": "...",
+    "technical_issues": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."}
+    ],
+    "content_gaps": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."}
+    ],
+    "action_plan": "..."
+  }
+}
+PROMPT;
+    }
+
+    // ── ADS prompt ────────────────────────────────────────────────────────────
+
+    private static function build_ads_prompt( array $lead, array $ps, string $cal_link ): string {
+        $biz      = self::clean_name( $lead );
+        $city     = ! empty( trim( $lead['location'] ?? '' ) ) ? trim( $lead['location'] ) : 'your area';
+        $website  = $lead['website'] ?? '';
+        $perf     = $ps['performance_score'];
+        $seo      = $ps['seo_score'];
+        $lcp_sec  = $ps['lcp_sec'];
+        $opp      = self::opp_text( $ps );
+        $issues   = self::seo_issues( $ps );
+        $services = self::services_line( $lead );
+
+        return <<<PROMPT
+You are an elite cold email copywriter. You write short, punchy, human emails that get replies.
+
+Write ONE cold outreach email for Haris Farooq (AI Driven SEO Expert, harisfarooqseo.online) to send to {$biz}.
+
+BUSINESS DATA:
+- Business Name: {$biz}
+- Website: {$website}
+- City / Location: {$city}
+- {$services}
+- Performance Score: {$perf}/100
+- SEO Score: {$seo}/100
+- Page Load Time: {$lcp_sec}s
+- SEO problems found: {$issues}
+- Technical issues: {$opp}
+
+SERVICES RULE — CRITICAL:
+Use the services listed above when talking about what customers search for. Mention their actual service by name (e.g. "HVAC repair", "dental implants", "roofing"). Do NOT use generic phrases like "your services" or "what you offer". Use the real service name.
+
+LOCATION RULE — CRITICAL:
+The city "{$city}" MUST appear naturally at least 2 times in the email body. Tie it to competitors getting free traffic and customers paying for what {$biz} is paying for with ads. Never use "your area" or "locally". Always use: {$city}.
+
+THE CORE PAIN:
+{$biz} pays for every single customer through ads. The moment the budget stops, leads stop. Meanwhile competitors in {$city} who rank organically get those same customers free every month. {$biz}'s SEO score is {$seo}/100 — the site cannot rank on its own right now.
+
+EMAIL STRUCTURE:
+
+SUBJECT: Max 6 words. Hook around paying for every customer, wasted ad budget, or renting vs owning traffic. No question marks.
+
+PARAGRAPH 1 — THE HOOK (2-3 sentences):
+Open with the ad spend pain — {$biz} pays for every customer searching for their service in {$city}, while competitors who rank organically get those same customers free. Not just free this month — free every month, compounding. Do NOT open with speed. Do NOT start with "I".
+
+PARAGRAPH 2 — THE PROOF (2-3 sentences):
+{$biz}'s site has an SEO score of {$seo}/100. Even if they stopped ads today, the site cannot bring in customers for their service in {$city} on its own. Pick the worst issue from: {$issues}. Explain it simply — no jargon.
+
+PARAGRAPH 3 — THE OUTCOME (2 sentences):
+What organic SEO looks like — customers in {$city} finding {$biz} for their specific service without a single ad spend. Showing up in Google and ChatGPT when people in {$city} search for that service. Every month it compounds.
+
+CTA (2 sentences — write these naturally, do NOT copy word for word):
+First sentence: tie it to the ad spend — every month {$biz} waits is another month paying for customers that SEO would deliver for free. Be specific about the waste.
+Second sentence: offer to show them in 15 minutes exactly how much they could reduce their ad spend while getting the same or more customers from {$city}.
+
+SIGN OFF:
+Haris Farooq | SEO Specialist | hello@harisfarooqseo.online
+
+STYLE — non-negotiable:
+- Plain flowing prose paragraphs. ZERO bullet points. ZERO dashes. ZERO lists.
+- Short sentences. Max 15 words each.
+- Simple English. No jargon. No "ROI", "digital presence", "leverage", "synergy", "reach out".
+- Never say "I hope", "I came across", "I noticed", "I specialize", "I offer".
+- Never bold anything. No asterisks. No markdown.
+- Total body: 100-120 words. Not counting subject or sign-off.
+- Output ONLY the final email. No labels. No explanation.
+
+AUDIT REPORT for PDF:
+1. Executive summary: {$biz} runs ads for their service but organic presence is weak — what this costs in {$city}
+2. Two issues: ad landing page speed ({$lcp_sec}s killing conversions) + worst SEO gap from: {$issues}
+3. Two strategy gaps: not ranking organically in {$city} for their service keywords + no AI search visibility
+4. Action plan: how SEO reduces ad dependency, compounds monthly, builds visibility in {$city}. Soft CTA: {$cal_link}
+
+RESPOND ONLY WITH VALID JSON — no markdown, no backticks:
+{
+  "email_subject": "...",
+  "email_body": "...",
+  "report": {
+    "executive_summary": "...",
+    "technical_issues": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."}
+    ],
+    "content_gaps": [
+      {"title": "...", "description": "..."},
+      {"title": "...", "description": "..."}
+    ],
+    "action_plan": "..."
+  }
+}
+PROMPT;
+    }
+
+    // ── NO WEBSITE prompt ─────────────────────────────────────────────────────
+
+    private static function build_no_website_prompt( array $lead, string $cal_link ): string {
+        $biz      = self::clean_name( $lead );
+        $city     = ! empty( trim( $lead['location'] ?? '' ) ) ? trim( $lead['location'] ) : 'your area';
+        $industry = ! empty( trim( $lead['position'] ?? '' ) ) ? trim( $lead['position'] ) : 'your industry';
+        $services = self::services_line( $lead );
+
+        return <<<PROMPT
+You are an elite cold email copywriter. You write short, punchy, human emails that get replies.
+
+Write ONE cold outreach email for Haris Farooq (Website & SEO Specialist, harisfarooqseo.online) to send to {$biz}.
+
+BUSINESS DATA:
+- Business Name: {$biz}
+- City / Location: {$city}
+- Industry / Position: {$industry}
+- {$services}
+- Critical fact: {$biz} has NO website at all.
+
+SERVICES RULE — CRITICAL:
+Use the actual services listed above throughout the email. When talking about what people search for, name the specific service (e.g. "plumber", "wedding photographer", "accountant"). Do NOT use "your services" or "what you offer". Use the real service name from the data.
+
+LOCATION RULE — CRITICAL:
+The city "{$city}" MUST appear naturally at least 3 times in the email body. Every pain point must be tied to {$city}. Use it like: "people in {$city} searching for [service]", "your competitors in {$city}", "customers in {$city} cannot find you". Never use "your area" or "locally". Always use: {$city}.
+
+THE CORE PAIN:
+Right now someone in {$city} is searching for their specific service. {$biz} does not exist online. A competitor in {$city} gets that call. This happens every single day. {$biz} is invisible on Google and ChatGPT.
+
+THE PITCH:
+We build a professional website for {$biz} and rank it on Google and in AI tools like ChatGPT — so when someone in {$city} searches for their service, {$biz} shows up. Not a competitor. {$biz}.
+
+EMAIL STRUCTURE:
+
+SUBJECT: Max 6 words. About being invisible in {$city} or missing customers. No question marks.
+
+PARAGRAPH 1 — THE HOOK (2-3 sentences):
+Open with the blunt truth — someone in {$city} is searching for their specific service right now. {$biz} does not exist online. A competitor gets that call. Do NOT start with "I". Be matter-of-fact, not condescending.
+
+PARAGRAPH 2 — THE SCALE (2-3 sentences):
+This is not one customer. People in {$city} search for this service every single day. Every search goes to a competitor because {$biz} cannot be found — not on Google, not on ChatGPT, nowhere.
+
+PARAGRAPH 3 — THE SOLUTION (2-3 sentences):
+We build {$biz} a website that ranks on Google AND shows up in ChatGPT when people in {$city} search for their service. Not just a website. One that actually brings in calls and customers from {$city}. This is exactly what competitors already have.
+
+CTA (2 sentences — write these naturally, do NOT copy word for word):
+First sentence: most businesses we build and rank for start getting calls from {$city} within 30 days of going live.
+Second sentence: ask if they have 15 minutes this week to see exactly what a website built for {$city} searches would look like for {$biz}.
+
+SIGN OFF:
+Haris Farooq | Website & SEO Specialist | hello@harisfarooqseo.online
+
+STYLE — non-negotiable:
+- Plain flowing prose paragraphs. ZERO bullet points. ZERO dashes. ZERO lists.
+- Short sentences. Max 15 words each.
+- Simple English. Zero jargon. Zero technical terms.
+- NEVER mention SEO audits, PageSpeed scores, load times, or technical fixes.
+- The ENTIRE email is about building a website that brings customers from {$city} for their specific service.
+- Never say "I hope", "I came across", "digital presence", "online visibility", "leverage", "reach out".
+- Never bold anything. No asterisks. No markdown.
+- Total body: 110-130 words. Not counting subject or sign-off.
+- Output ONLY the final email. No labels. No explanation.
+
+RESPOND ONLY WITH VALID JSON — no markdown, no backticks:
+{
+  "email_subject": "...",
+  "email_body": "...",
+  "report": {}
+}
+PROMPT;
+    }
+}
